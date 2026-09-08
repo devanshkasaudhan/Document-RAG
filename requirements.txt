@@ -1,0 +1,19 @@
+streamlit>=1.30
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+numpy>=1.24
+pymupdf>=1.23
+pillow>=10.0
+easyocr>=1.7
+
+# Choose ONE answer generator (or install both):
+
+# Free local model (no API key, slower)
+transformers>=4.38
+torch>=2.0
+
+# OpenAI (paid, higher quality)
+openai>=1.0
+
+# Gemini (free tier available, no credit card)
+google-genai>=0.3
