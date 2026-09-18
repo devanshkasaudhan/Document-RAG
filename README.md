@@ -89,11 +89,11 @@ Three answer-generation options are available:
 
 | File | Responsibility |
 | --- | --- |
-| `app.py` | Streamlit entry point and the upload, indexing, retrieval, and answer workflow. |
-| `ui.py` | Sidebar controls and application settings. |
-| `rag_engine.py` | Text extraction, OCR, chunking, embeddings, FAISS indexing, and retrieval. |
-| `generators.py` | OpenAI, Gemini, and local FLAN-T5 answer generator integrations. |
-| `config.py` | Lightweight `.env` loading and API-key lookup. |
+| `src/app.py` | Streamlit entry point and the upload, indexing, retrieval, and answer workflow. |
+| `src/ui.py` | Sidebar controls and application settings. |
+| `src/rag_engine.py` | Text extraction, OCR, chunking, embeddings, FAISS indexing, and retrieval. |
+| `src/generators.py` | OpenAI, Gemini, and local FLAN-T5 answer generator integrations. |
+| `src/config.py` | Lightweight `.env` loading and API-key lookup. |
 | `requirements.txt` | Python dependencies. |
 | `Dockerfile` | Production-style Streamlit image with CPU PyTorch and native OCR libraries. |
 | `docker-compose.yml` | Local container service, port mapping, API-key forwarding, and persistent model cache. |
@@ -112,7 +112,7 @@ Three answer-generation options are available:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m streamlit run app.py
+python -m streamlit run src/app.py
 ```
 
 Open `http://localhost:8501` in a browser after Streamlit starts.

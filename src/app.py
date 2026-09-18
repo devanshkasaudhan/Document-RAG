@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from config import get_api_key, load_env_file
-from generators import generate_with_gemini, generate_with_local, generate_with_openai, get_local_generator
-from rag_engine import RAGEngine
-from ui import AppSettings, render_sidebar
+from src.config import get_api_key, load_env_file
+from src.generators import generate_with_gemini, generate_with_local, generate_with_openai, get_local_generator
+from src.rag_engine import RAGEngine
+from src.ui import AppSettings, render_sidebar
 
 
 load_env_file()
