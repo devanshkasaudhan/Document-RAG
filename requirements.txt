@@ -8,9 +8,11 @@ easyocr>=1.7
 
 # Choose ONE answer generator (or install both):
 
-# Free local model (no API key, slower)
+# Free local model (no API key, slower). Keep these versions aligned with the
+# CPU wheels installed in Dockerfile.
 transformers>=4.38
-torch>=2.0
+torch==2.7.1
+torchvision==0.22.1
 
 # OpenAI (paid, higher quality)
 openai>=1.0

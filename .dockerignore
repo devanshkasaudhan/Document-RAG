@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[oc]
+
+# Distribution / packaging
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments — uv creates a fresh .venv inside the container
+.venv/
+venv/
+
+# Docker
+*.env
+.env
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+
+
+# HuggingFace model cache (large, downloaded at runtime)
+.cache/

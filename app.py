@@ -1,7 +1,16 @@
-import os
+"""Streamlit entry point for the document Q&A application."""
+
+from __future__ import annotations
+
 import streamlit as st
+
+from config import get_api_key, load_env_file
+from generators import generate_with_gemini, generate_with_local, generate_with_openai, get_local_generator
 from rag_engine import RAGEngine
-from generators import generate_with_openai, generate_with_gemini, generate_with_local, get_local_generator
+from ui import AppSettings, render_sidebar
+
+
+load_env_file()
 
 st.set_page_config(page_title="Document Q&A", page_icon="📄", layout="wide")
 st.title("Document Q&A")
@@ -9,151 +18,119 @@ st.caption("Upload a document, build a searchable index, and get answers grounde
 
 
 @st.cache_resource
-def get_engine():
+def get_engine() -> RAGEngine:
     return RAGEngine()
 
-engine = get_engine()
 
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    st.header("Settings")
-
-    st.subheader("Model status")
-    embed_status = st.empty()
-    if engine.is_embed_loaded():
-        embed_status.success("Embedding model loaded")
-    else:
-        embed_status.info("Embedding model not loaded yet")
-
-    if st.button("Preload embedding model"):
-        with st.status("Loading embedding model (first run downloads ~90 MB)…",
-                       expanded=True) as s:
-            engine.load_embedder()
-            s.update(label="Embedding model loaded", state="complete")
-        embed_status.success("Embedding model loaded")
-
-    st.divider()
-    backend = st.radio("Answer generator",
-                       ["Gemini (free API key)", "Local model (free)", "OpenAI (API key)"])
-    api_key = ""
-    gemini_key = ""
-    if backend.startswith("OpenAI"):
-        api_key = st.text_input("OpenAI API key", type="password",
-                                value=os.getenv("OPENAI_API_KEY", ""))
-    elif backend.startswith("Gemini"):
-        gemini_key = st.text_input("Gemini API key", type="password",
-                                   value=os.getenv("GEMINI_API_KEY", ""),
-                                   help="Get a free key at aistudio.google.com/apikey")
-    top_k = st.slider("Passages to retrieve (k)", 1, 6, 3)
-    ocr_dpi = st.select_slider("OCR resolution (DPI)", [150, 200, 300], value=200,
-                               help="Higher is more accurate but slower. Only affects image pages.")
-
-
-st.subheader("Step 1 — Upload a document")
-upload = st.file_uploader("PDF, PNG, or JPG", type=["pdf", "png", "jpg", "jpeg"])
-if upload is not None:
-    st.success(f"Uploaded: **{upload.name}**  ({len(upload.getvalue()) / 1024:.0f} KB)")
-
-
-st.subheader("Step 2 — Process the document")
-
-if st.button("Extract & build index", type="primary", disabled=upload is None):
+def process_upload(engine: RAGEngine, upload, ocr_dpi: int) -> None:
+    """Extract document text and replace the in-memory search index."""
     file_bytes = upload.getvalue()
     is_pdf = upload.name.lower().endswith(".pdf")
 
-
     if not engine.is_embed_loaded():
-        with st.status("Loading embedding model…", expanded=True) as s:
+        with st.status("Loading embedding model…", expanded=True) as status:
             engine.load_embedder()
-            s.update(label="Embedding model ready", state="complete")
+            status.update(label="Embedding model ready", state="complete")
 
+    text = extract_upload_text(engine, file_bytes, is_pdf, ocr_dpi)
+    with st.status("Chunking, embedding & indexing…", expanded=True) as status:
+        progress_bar = st.progress(0, text="Embedding…")
 
-    if is_pdf:
-        with st.status("Reading document…", expanded=True) as s:
-            bar = st.progress(0, text="Starting…")
+        def embed_progress(done: int, total: int) -> None:
+            progress_bar.progress(done / total, text=f"Embedding passages: {done}/{total}")
 
-            def page_status(page, total, mode):
-                label = "reading text" if mode == "text" else "running OCR (image page)"
-                bar.progress(page / total, text=f"Page {page}/{total} — {label}")
-
-            result = engine.extract_document(file_bytes, dpi=ocr_dpi,
-                                             page_status=page_status)
-            words = len(result["text"].split())
-            if words == 0:
-                s.update(label="No readable text found in the document.",
-                         state="error")
-                st.stop()
-            msg = f"Extracted {words} words from {result['pages']} pages"
-            if result["ocr_pages"]:
-                msg += f" ({result['ocr_pages']} page(s) via OCR)"
-            s.update(label=msg, state="complete")
-        text = result["text"]
-    else:
-        # Standalone image -> OCR directly
-        with st.status("Running OCR on image…", expanded=True) as s:
-            text = engine.ocr_image(file_bytes)
-            if not text.strip():
-                s.update(label="No text detected in the image.", state="error")
-                st.stop()
-            s.update(label=f"Extracted {len(text.split())} words", state="complete")
-
-
-    with st.status("Chunking, embedding & indexing…", expanded=True) as s:
-        ebar = st.progress(0, text="Embedding…")
-
-        def embed_progress(done, total):
-            ebar.progress(done / total, text=f"Embedding passages: {done}/{total}")
-
-        n = engine.build_index(text, progress=embed_progress)
-        s.update(label=f"Index built from {n} passages — ready for questions.",
-                 state="complete")
-
+        chunks = engine.build_index(text, progress=embed_progress)
+        status.update(label=f"Index built from {chunks} passages — ready for questions.", state="complete")
     st.session_state["ready"] = True
 
 
-st.subheader("Step 3 — Ask a question")
-question = st.text_input("Your question",
-                         placeholder="e.g. Summarize the key findings of this document")
+def extract_upload_text(engine: RAGEngine, file_bytes: bytes, is_pdf: bool, ocr_dpi: int) -> str:
+    """Extract PDF text or OCR a standalone image, with user-facing progress."""
+    if not is_pdf:
+        with st.status("Running OCR on image…", expanded=True) as status:
+            text = engine.ocr_image(file_bytes)
+            if not text.strip():
+                status.update(label="No text detected in the image.", state="error")
+                st.stop()
+            status.update(label=f"Extracted {len(text.split())} words", state="complete")
+        return text
 
-if st.button("Get answer",
-             disabled=not (question.strip() and st.session_state.get("ready"))):
-    with st.spinner("Retrieving relevant passages…"):
-        hits = engine.retrieve(question, k=top_k)
+    with st.status("Reading document…", expanded=True) as status:
+        progress_bar = st.progress(0, text="Starting…")
 
-    st.markdown("#### Retrieved context")
-    for h in hits:
-        with st.expander(f"Passage #{h['rank']} (distance {h['distance']:.3f} — lower is closer)"):
-            st.write(h["chunk"])
+        def page_status(page: int, total: int, mode: str) -> None:
+            label = "reading text" if mode == "text" else "running OCR (image page)"
+            progress_bar.progress(page / total, text=f"Page {page}/{total} — {label}")
 
-    context = "\n\n".join(h["chunk"] for h in hits)
+        result = engine.extract_document(file_bytes, dpi=ocr_dpi, page_status=page_status)
+        words = len(result["text"].split())
+        if words == 0:
+            status.update(label="No readable text found in the document.", state="error")
+            st.stop()
+        message = f"Extracted {words} words from {result['pages']} pages"
+        if result["ocr_pages"]:
+            message += f" ({result['ocr_pages']} page(s) via OCR)"
+        status.update(label=message, state="complete")
+    return result["text"]
 
-    st.markdown("#### Answer")
-    try:
-        with st.spinner("Generating a grounded answer…"):
-            if backend.startswith("OpenAI"):
-                if not api_key:
-                    st.warning("Add your OpenAI key in the sidebar, or switch to the free local model.")
-                    st.stop()
-                answer = generate_with_openai(question, context, api_key)
-            elif backend.startswith("Gemini"):
-                if not gemini_key:
-                    st.warning("Add your free Gemini key in the sidebar (aistudio.google.com/apikey), "
-                               "or switch to the local model.")
-                    st.stop()
-                answer = generate_with_gemini(question, context, gemini_key)
-            else:
-                if "flan_loaded" not in st.session_state:
-                    with st.status("Loading local answer model (first run)…",
-                                   expanded=True) as s:
-                        get_local_generator()
-                        st.session_state["flan_loaded"] = True
-                        s.update(label="Local answer model ready", state="complete")
-                answer = generate_with_local(question, context)
-        st.success(answer)
-    except Exception as e:
-        st.error(f"Generation failed: {e}")
 
-st.divider()
-st.caption("Embeddings: all-MiniLM-L6-v2 · Vector search: FAISS · PDF: PyMuPDF · OCR: EasyOCR (image pages only)")
+def generate_answer(question: str, context: str, settings: AppSettings) -> str:
+    """Generate an answer using the backend selected in the sidebar."""
+    if settings.backend.startswith("OpenAI"):
+        if not settings.api_key:
+            st.warning("Add OPENAI_API_KEY to .env or enter it above, or switch to another model.")
+            st.stop()
+        return generate_with_openai(question, context, settings.api_key)
+    if settings.backend.startswith("Gemini"):
+        if not settings.api_key:
+            st.warning("Add GEMINI_API_KEY to .env or enter it above, or switch to the local model.")
+            st.stop()
+        return generate_with_gemini(question, context, settings.api_key)
+
+    if "flan_loaded" not in st.session_state:
+        with st.status("Loading local answer model (first run)…", expanded=True) as status:
+            get_local_generator()
+            st.session_state["flan_loaded"] = True
+            status.update(label="Local answer model ready", state="complete")
+    return generate_with_local(question, context)
+
+
+def main() -> None:
+    engine = get_engine()
+    settings = render_sidebar(engine, get_api_key("OpenAI"), get_api_key("Gemini"))
+
+    st.subheader("Step 1 — Upload a document")
+    upload = st.file_uploader("PDF, PNG, or JPG", type=["pdf", "png", "jpg", "jpeg"])
+    if upload is not None:
+        st.success(f"Uploaded: **{upload.name}**  ({len(upload.getvalue()) / 1024:.0f} KB)")
+
+    st.subheader("Step 2 — Process the document")
+    if st.button("Extract & build index", type="primary", disabled=upload is None):
+        process_upload(engine, upload, settings.ocr_dpi)
+
+    st.subheader("Step 3 — Ask a question")
+    question = st.text_input("Your question", placeholder="e.g. Summarize the key findings of this document")
+    if st.button("Get answer", disabled=not (question.strip() and st.session_state.get("ready"))):
+        with st.spinner("Retrieving relevant passages…"):
+            hits = engine.retrieve(question, k=settings.top_k)
+
+        st.markdown("#### Retrieved context")
+        for hit in hits:
+            with st.expander(f"Passage #{hit['rank']} (distance {hit['distance']:.3f} — lower is closer)"):
+                st.write(hit["chunk"])
+
+        st.markdown("#### Answer")
+        try:
+            with st.spinner("Generating a grounded answer…"):
+                context = "\n\n".join(hit["chunk"] for hit in hits)
+                answer = generate_answer(question, context, settings)
+            st.success(answer)
+        except Exception as error:
+            st.error(f"Generation failed: {error}")
+
+    st.divider()
+    st.caption("Embeddings: all-MiniLM-L6-v2 · Vector search: FAISS · PDF: PyMuPDF · OCR: EasyOCR (image pages only)")
+
+
+if __name__ == "__main__":
+    main()
