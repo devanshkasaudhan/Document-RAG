@@ -51,7 +51,7 @@ For PDFs, `RAGEngine.extract_document` checks each page for native text. Pages w
 
 This hybrid approach avoids unnecessary OCR work for normal digital PDFs while allowing scanned paperwork and photographed content to remain searchable.
 
-![Document extraction](images\Screenshot_18-9-2026_205549_localhost.jpeg)
+![Document extraction](images/Screenshot_18-9-2026_205549_localhost.jpeg)
 
 
 ### 2. Chunking and embedding
@@ -68,7 +68,7 @@ When the user asks a question, the same embedding model converts the question in
 
 The interface shows every retrieved passage and its distance before showing the generated answer. Lower distance values mean that the embedding model considers a passage more similar to the question. This visibility makes it easier to judge whether the answer has useful supporting context.
 
-![Alt text](images\Screenshot_18-9-2026_204936_localhost.jpeg)
+![Alt text](images/Screenshot_18-9-2026_204936_localhost.jpeg)
 
 ### 4. Answer generation
 
@@ -82,7 +82,7 @@ Three answer-generation options are available:
 | OpenAI | `gpt-4o-mini` | `OPENAI_API_KEY` | Hosted option requiring an OpenAI key. |
 | Local model | `google/flan-t5-base` | Not required | Downloaded on first use; may be slower and less capable than hosted models. |
 
-![Answer Generation](images\Screenshot_18-9-2026_204947_localhost.jpeg)
+![Answer Generation](images/Screenshot_18-9-2026_204947_localhost.jpeg)
 
 
 ## Project structure
@@ -135,7 +135,7 @@ Docker packages the application and its system dependencies, including the OpenG
 ```powershell
 docker compose up --build --detach
 ```
-![Docker Container running](images\image.png)
+![Docker Container running](images/image.png)
 
 
 Then open `http://localhost:8501`.
@@ -150,7 +150,7 @@ docker compose down
 
 The named `hf-cache` volume persists Hugging Face and EasyOCR model downloads between container restarts. The service runs as the non-root `appuser` account and includes a health check at `/_stcore/health`.
 
-![Hugging Face Volume](images\hf_volume.png)
+![Hugging Face Volume](images/hf_volume.png)
 
 
 ## Using the interface
